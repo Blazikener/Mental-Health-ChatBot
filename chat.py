@@ -17,13 +17,13 @@ router = APIRouter()
 user_memories = {}
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
-def get_user_memory(userid: str):
-    if userid not in user_memories:
-        user_memories[userid] = ConversationBufferMemory(
+def get_user_memory(user_id: str):
+    if user_id not in user_memories:
+        user_memories[user_id] = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True
         )
-    return user_memories[userid]
+    return user_memories[user_id]
 
 @router.post("/chat", response_model=schemas.ChatOut)
 def chat(user_input: schemas.ChatInput, db: Session = Depends(get_db)):
@@ -39,7 +39,7 @@ def chat(user_input: schemas.ChatInput, db: Session = Depends(get_db)):
 
         # Store chat history
         chat_entry = models.ChatHistory(
-            userid=user.id,
+            user_id=user.id,
             message=user_input.message,
             mood=mood
         )
