@@ -48,7 +48,9 @@ def chat(user_input: schemas.ChatInput, db: Session = Depends(get_db)):
 
         # Initialize AI components
         embeddings = OpenAIEmbeddings(api_key=openai_api_key)
-        vectorstore = Chroma(persist_directory="chroma_db", embedding_function=embeddings)
+        vectorstore = Chroma(collection_name=f"user_{user.id}",
+                             persist_directory="chroma_db", embedding_function=embeddings)
+        vectorstore.persist() 
         llm = ChatOpenAI(api_key=openai_api_key, temperature=0.7)
         memory = get_user_memory(user_input.email)
         
