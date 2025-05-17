@@ -16,7 +16,7 @@ class User(Base):
 class ChatHistory(Base):
     __tablename__ = 'chat_history'
     id = Column(Integer, primary_key=True, index=True)
-    userid = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
     message = Column(String)
     mood = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -26,6 +26,6 @@ class ChatHistory(Base):
 class UserProfile(Base):
     __tablename__ = "user_profile"
     id = Column(Integer, primary_key=True)
-    userid = Column(Integer, ForeignKey("users.id"), unique=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
     dominant_mood = Column(String, default="Normal")
     user = relationship("User", back_populates="profile")
