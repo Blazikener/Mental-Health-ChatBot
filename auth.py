@@ -8,6 +8,8 @@ import models
 import schemas
 
 import os
+if not os.getenv("SECRET_KEY"):
+    raise ValueError("SECRET_KEY environment variable not set")
 
 router = APIRouter()
 SECRET_KEY = os.getenv("SECRET_KEY")

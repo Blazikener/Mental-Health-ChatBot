@@ -32,3 +32,12 @@ def update_dominant_mood(user_id: int, dominant_mood: str, db: Session):
     else:
         profile.dominant_mood = dominant_mood
     db.commit()
+def get_chat_history(user_id: int, db: Session, n: int = 5):
+    from models import ChatHistory
+    return (
+        db.query(ChatHistory.message, ChatHistory.mood, ChatHistory.timestamp)
+        .filter(ChatHistory.user_id == user_id)
+        .order_by(ChatHistory.timestamp.desc())
+        .limit(n)
+        .all()
+    )

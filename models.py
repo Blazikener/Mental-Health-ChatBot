@@ -27,5 +27,5 @@ class UserProfile(Base):
     __tablename__ = "user_profile"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    dominant_mood = Column(String, default="Normal")
+    dominant_mood = Column(String, default="neutral")
     user = relationship("User", back_populates="profile")
