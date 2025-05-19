@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mental Health Assistant</title>
+    <style>
+        /*  auth  */
+        #auth-section, #chat-section {
+            display: none;
+        }
+        #auth-section.active, #chat-section.active {
+            display: block;
+        }
+        #message:disabled {
+            background: #eee;
+            cursor: not-allowed;
+        }
+
+        /* General styles */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        #messages {
+            border: 1px solid #ddd;
+            height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            position: relative;
+        }
+        .user {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+        .bot {
+            background: #f5f5f5;
+            margin-right: 20%;
+        }
+        .bot-mood {
+            background: #fff3e0;
+            font-size: 0.9em;
+            padding: 8px;
+            margin: 5px 0;
+        }
+        .error {
+            color: #d32f2f;
+            padding: 10px;
+            text-align: center;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mental Health Assistant</h1>
+
+    <!-- Auth  -->
+    <div id="auth-section" class="active">
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <button onclick="handleAuth('login')">Login</button>
+        <button onclick="handleAuth('signup')" style="background:#2196F3">Sign Up</button>
+        <p id="auth-error" class="error"></p>
+    </div>
+
+    <!-- Chat  -->
+    <div id="chat-section">
+        <div id="messages"></div>
+        <div class="loading" id="loading">Processing...</div>
+        <div>
+            <input type="text" id="message" placeholder="Type your message..." disabled>
+            <button onclick="sendMessage()" id="send-btn" disabled>Send</button>
+        </div>
+        <p id="chat-error" class="error"></p>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('token');
+        let currentEmail = '';
+
+        // Initial authentication check
+        document.addEventListener('DOMContentLoaded', async () => {
+            showLoading(true);
+            try {
+                if (token) {
+                    const isValid = await validateToken();
+                    if (isValid) {
+                        showChatUI();
+                        return;
+                    }
+                }
+                showAuthUI();
+            } catch (error) {
+                showError('auth-error', 'Connection error');
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        async function validateToken() {
+            try {
+                const response = await fetch('/auth/validate', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    currentEmail = data.email;
+                    document.getElementById('email').value = currentEmail;
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function showAuthUI() {
+            document.getElementById('auth-section').classList.add('active');
+            document.getElementById('chat-section').classList.remove('active');
+            document.getElementById('message').disabled = true;
+            document.getElementById('send-btn').disabled = true;
+            localStorage.removeItem('token');
+            token = null;
+        }
+
+        function showChatUI() {
+            document.getElementById('auth-section').classList.remove('active');
+            document.getElementById('chat-section').classList.add('active');
+            document.getElementById('message').disabled = false;
+            document.getElementById('send-btn').disabled = false;
+            document.getElementById('message').focus();
+        }
+
+        async function handleAuth(action) {
+            showLoading(true);
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            if (!email || !password) {
+                showError('auth-error', 'Please fill in all fields');
+                showLoading(false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/auth/${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': ' application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (action === 'login') {
+                        token = data.access_token;
+                        localStorage.setItem('token', token);
+                        currentEmail = email;
+                        showChatUI();
+                    } else {
+                        showError('auth-error', 'Signup successful! Please login.');
+                    }
+                } else {
+                    showError('auth-error', data.detail || 'Authentication failed');
+                }
+            } catch (error) {
+                showError('auth-error', 'Connection error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function sendMessage() {
+            const messageInput = document.getElementById(' message');
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            showLoading(true);
+            messageInput.value = '';
+            addMessage(message, 'user');
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        email: currentEmail,
+                        message: message
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addMessage(data.reply, ' bot');
+                    addMessage(
+                        `Your current mood:  ${data.your_mood} • Dominant mood: ${data.dominant_mood}`,
+                        'bot-mood'
+                    );
+                } else {
+                    showError('chat-error', data.detail || 'Failed to send message');
+                }
+            } catch (error){
+                showError('chat-error', 'Connection error');
+            } finally {
+                showLoading(false);
+            }
+        }
+        function addMessage(text, type) {
+            const messagesDiv = document.getElementById('messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}`;
+            msgDiv.textContent = text;
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showError(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            setTimeout(() => element.textContent = '', 5000);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = 
+                show ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>
