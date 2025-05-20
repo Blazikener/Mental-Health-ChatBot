@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -15,7 +16,6 @@ class Token(BaseModel):
     token_type: str
 
 class ChatInput(BaseModel):
-    email: EmailStr
     message: str
 
 class ChatOut(BaseModel):

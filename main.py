@@ -1,58 +1,64 @@
-from dotenv import load_dotenv
-load_dotenv()  # Must be FIRST import
-
-import os
+# main.py
 from fastapi import FastAPI
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
-from database import engine
-from base import Base
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from database import engine, Base
+import models
+from starlette.requests import Request  
+from starlette.responses import JSONResponse
 from auth import router as auth_router
 from chat import router as chat_router
+from fastapi.responses import FileResponse
+from dotenv import load_dotenv
+load_dotenv()  
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request
+from starlette.responses import JSONResponse, FileResponse
+from database import engine, Base
+from auth import router as auth_router
+from chat import router as chat_router
+import models
 
-# Create app FIRST
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI()
 
-def load_existing_vectors():
-    """Load all Chroma vector stores on startup"""
-    embeddings = OpenAIEmbeddings(api_key=os.getenv("OPENAI_API_KEY"))
-    chroma_dir = "chroma_db"
+# CORS Setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+        
+    if request.url.path == "/" or \
+       request.url.path.startswith("/auth") or \
+       request.url.path.startswith("/static"):
+        return await call_next(request)
+        
+    if "Authorization" not in request.headers:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing authorization token"},
+        )
     
-    if os.path.exists(chroma_dir):
-        print("\n=== Loading existing vector stores ===")
-        for user_dir in os.listdir(chroma_dir):
-            if user_dir.startswith("user_"):
-                user_id = user_dir.split("_")[-1]
-                Chroma(
-                    collection_name=f"user_{user_id}",
-                    persist_directory=os.path.join(chroma_dir, user_dir),
-                    embedding_function=embeddings
-                )
-                print(f"Loaded vectors for user {user_id}")
+    return await call_next(request)
 
-@app.on_event("startup")  # Now AFTER app is defined
-async def startup_event():
-    # Load existing Chroma collections
-    load_existing_vectors()
-    
-    # Verify OpenAI connection
-    print("\n=== Testing OpenAI API Key Permissions ===")
-    from openai import OpenAI
-    try:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        models = client.models.list()
-        print(f"Successfully accessed {len(models.data)} OpenAI models")
-    except Exception as e:
-        print(f"OpenAI connection error: {str(e)}")
-        raise
-
-    # Create database tables
-    Base.metadata.create_all(bind=engine)
-
-# Include routers AFTER app creation
+# routers
 app.include_router(auth_router)
 app.include_router(chat_router)
 
+# static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.get("/")
-def read_root():
-    return {"message": "Mental Health Chat API"}
+async def serve_frontend():
+    return FileResponse("static/index.html")

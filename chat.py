@@ -1,3 +1,4 @@
+# chat.py (updated)
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from textblob import TextBlob
@@ -11,52 +12,72 @@ import os
 import schemas
 from database import get_db, get_latest_moods, update_dominant_mood, get_chat_history
 import models
+from auth import get_current_user
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter()
 
-user_memories = {}
-openai_api_key = os.getenv("OPENAI_API_KEY")
+# Validate OpenAI API Key
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY environment variable not set")
 
-# Custom prompt template with context and mood integration
-prompt_template = """[Retrieved Context]
+openai_api_key = os.getenv("OPENAI_API_KEY")
+embeddings = OpenAIEmbeddings(api_key=openai_api_key)
+
+# Enhanced prompt template with mood context
+prompt_template = """Use the following context and chat history to answer the question. 
+Consider the user's emotional state in your response.
+
+[User Mood Context]
+Dominant Mood: {dominant_mood}
+Last Interaction Mood: {last_mood}
+
+[Context]
 {context}
 
-[User Profile]
-[User has been feeling {dominant_mood} recently and just said: “{last_message}” (mood: {last_mood})]
+[Chat History]
+{chat_history}
 
-Current Query: {question}
-Assistant:"""
+[Question]
+{question}
+
+[Response]
+"""
 
 PROMPT = PromptTemplate(
     template=prompt_template,
-    input_variables=["context", "dominant_mood", "chat_history", "last_message", "last_mood", "question"]
+    input_variables=["context", "question", "chat_history", "dominant_mood", "last_mood"]
 )
 
-def get_user_memory(user_id: str):
-    if user_id not in user_memories:
-        user_memories[user_id] = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
-    return user_memories[user_id]
+def get_vectorstore(user_id: str):
+    persist_dir = f"chroma_db/user_{user_id}"
+    return Chroma(
+        collection_name=f"user_{user_id}",
+        persist_directory=persist_dir,
+        embedding_function=embeddings
+    )
 
 @router.post("/chat", response_model=schemas.ChatOut)
-def chat(user_input: schemas.ChatInput, db: Session = Depends(get_db)):
+def chat(
+    user_input: schemas.ChatInput, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
     try:
-        # User verification
-        user = db.query(models.User).filter(models.User.email == user_input.email).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found.")
+        user = current_user
 
         # Sentiment analysis
-        polarity = TextBlob(user_input.message).sentiment.polarity
-        mood = "happy" if polarity > 0.2 else "sad" if polarity < -0.2 else "neutral"
+        blob = TextBlob(user_input.message)
+        polarity = blob.sentiment.polarity
+        current_mood = "happy" if polarity > 0.2 else "sad" if polarity < -0.2 else "neutral"
 
         # Store chat history
         chat_entry = models.ChatHistory(
             user_id=user.id,
             message=user_input.message,
-            mood=mood
+            mood=current_mood
         )
         db.add(chat_entry)
         db.commit()
@@ -66,68 +87,57 @@ def chat(user_input: schemas.ChatInput, db: Session = Depends(get_db)):
         dominant_mood = max(set(latest_moods), key=latest_moods.count) if latest_moods else "neutral"
         update_dominant_mood(user.id, dominant_mood, db)
 
-        # Chroma vectorstore setup
-        persist_dir = f"chroma_db/user_{user.id}"
-        embeddings = OpenAIEmbeddings(api_key=openai_api_key)
+        # Chroma vectorstore operations
+        vectorstore = get_vectorstore(user.id)
         
-        vectorstore = Chroma(
-            collection_name=f"user_{user.id}",
-            persist_directory=persist_dir,
-            embedding_function=embeddings
-        )
-
-        # Add message with metadata
+        # Add to vectorstore with metadata
         vectorstore.add_texts(
             texts=[user_input.message],
             metadatas=[{
-                "mood": mood,
-                "dominant_mood": dominant_mood,
-                "timestamp": datetime.utcnow().isoformat(),
                 "user_id": str(user.id),
-                "message": user_input.message
+                "timestamp": datetime.utcnow().isoformat(),
+                "mood": current_mood,
+                "dominant_mood": dominant_mood,
+                "type": "user_message"
             }]
         )
 
-        # Get formatted chat history
+        # Get historical context
         chat_history = get_chat_history(user.id, db, n=5)
-        formatted_history = "\n".join(
-            [f"{msg.timestamp}: {msg.message} (Mood: {msg.mood})" 
-             for msg in reversed(chat_history)]
-        )
-
-        # Get last interaction details
-        last_message = chat_history[0].message if chat_history else "N/A"
         last_mood = chat_history[0].mood if chat_history else "neutral"
 
-        # Initialize AI components
+        # Initialize conversation chain
         llm = ChatOpenAI(api_key=openai_api_key, temperature=0.7)
-        memory = get_user_memory(user_input.email)
+        memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+            input_key="question",
+            output_key="answer"
+        )
         
         qa_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
-            memory=ConversationBufferMemory(
-                memory_key="chat_history",
-                input_key="question",
-                return_messages=True
-            ),
+            memory=memory,
             verbose=True,
             combine_docs_chain_kwargs={"prompt": PROMPT},
-            get_chat_history=lambda h: h
+            return_source_documents=True
         )
 
-        # Generate response
-        result = qa_chain({
+        # Prepare chain inputs with required parameters
+        chain_inputs = {
             "question": user_input.message,
+            "chat_history": [f"{msg.message} (Mood: {msg.mood})" for msg in chat_history],
             "dominant_mood": dominant_mood,
-            "chat_history": formatted_history,
-            "last_message": last_message,
             "last_mood": last_mood
-        })
+        }
+
+        # Generate response
+        result = qa_chain.invoke(chain_inputs)
 
         return {
             "reply": result["answer"],
-            "your_mood": mood,
+            "your_mood": current_mood,
             "dominant_mood": dominant_mood
         }
 
