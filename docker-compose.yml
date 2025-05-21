@@ -1,0 +1,13 @@
+
+services:
+  chatbot:
+    build: .  
+    volumes:
+      - ./chroma_db:/app/chroma_db  
+      - ./user.db:/app/user.db      
+    ports:
+      - "8000:8000"  
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  
+      - SECRET_KEY=${SECRET_KEY}          
+    restart: unless-stopped  
