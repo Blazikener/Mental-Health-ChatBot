@@ -72,3 +72,15 @@ System detects: mood = sad, topic = exams
 Response is enhanced with mood + topic history.
 
 System returns a short, contextual answer with “thanks for asking!” at the end.
+
+## Screenshot:
+
+Sign up/Log in page:
+![Capture](https://github.com/user-attachments/assets/0d5bf911-2402-420a-a2dc-fcc8a1111daa)
+
+Chatting in with the bot:
+![image](https://github.com/user-attachments/assets/cd4ded85-796f-4002-a60c-a1699bc87012)
+
+Bot remembering about previous conversations and our mood:
+![image](https://github.com/user-attachments/assets/b6825565-fe01-4bb4-a6c2-266cebfcc5a2)
+
