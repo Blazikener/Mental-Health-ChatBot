@@ -23,3 +23,52 @@ cd mental-health-chatbot
 ```bash
 pip install -r requirements.txt
 ```
+
+## Set up your environment:
+
+Create a .env file in the root directory
+
+Add your OpenAI key:
+
+OPENAI_API_KEY=your_openai_key_here
+SECRET_KEY=your_secret_key_here  
+
+## Workflow:
+
+1.User Registration/Login:
+
+ -> Create account with email/password
+
+ -> Authenticate with JWT token
+
+2.Conversation Initiation:
+
+ ->Start chat session
+
+ ->System initializes mood tracking
+
+3.Message Interaction:
+
+ ->Send mental health-related messages
+
+ ->System analyzes sentiment (Happy/Neutral/Sad)
+
+ ->Responses adapt to detected mood and history
+
+4.Session Review:
+
+ ->View conversation history with mood timeline
+
+ ->Access vector database entries
+
+ ->Manage chat configurations
+
+## Example Prompt Flow:
+
+User: “I'm feeling overwhelmed with exams.”
+
+System detects: mood = sad, topic = exams
+
+Response is enhanced with mood + topic history.
+
+System returns a short, contextual answer with “thanks for asking!” at the end.
