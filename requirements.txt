@@ -11,3 +11,4 @@ chromadb
 textblob
 email-validator
 pydantic
+langchain
