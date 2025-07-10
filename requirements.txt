@@ -9,5 +9,5 @@ langchain-openai
 langchain-chroma
 chromadb
 textblob
-pydantic[email]
+email-validator
 pydantic
